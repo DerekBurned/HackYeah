@@ -1,4 +1,31 @@
 <resources>
-    <string name="app_name">TravelNow</string>
+    <string name="app_name">Know Before You Go</string>
     <string name="title_activity_maps">MapsActivity</string>
+    <string name="check_travel_safety">Check Travel Safety</string>
+    <string name="enter_destination">Enter your destination city</string>
+    <string name="city_name_hint">Enter city name</string>
+    <string name="check_safety">Check Safety</string>
+    <string name="map_icon">Map location icon</string>
+    <string name="safety_shield">Safety shield icon</string>
+    <string name="image_view_search_description">Search</string>
+    <string name="edit_text_search_location_hint">Search location...</string>
+    <string name="button_clear_description">Clear</string>
+    <string name="fab_my_location_description">My Location</string>
+    <string name="fab_refresh_reports_description">Refresh Reports</string>
+    <string name="fab_show_reports_description">Show Reports</string>
+    <string name="fab_map_type_description">Map Type</string>
+    <string name="fab_zoom_in_description">Zoom In</string>
+    <string name="fab_zoom_out_desc">Zoom Out</string>
+    <string name="fab_clear_reports">Clear Safety Zones</string>
+    <string name="tv_safe_text">Safe</string>
+    <string name="tv_cautious_text">Cautious</string>
+    <string name="tv_unsafe_text">Unsafe</string>
+    <string name="tv_dangerous_text">Dangerous</string>
+    <string name="tv_nearby_safety_reports_text">Nearby Safety Reports</string>
+    <string name="tv_sort_text">Sort</string>
+    <string name="tv_close_close">Close</string>
+    <string name="tv_sorted_by_most_dangerous_first_text">Sorted by: Most Dangerous First</string>
+    <string name="tv_no_reports_description">No reports</string>
+    <string name="tv_no_reports_in_this_area_yet_text">No reports in this area yet</string>
+    <string name="tv_be_the_first_to_help_travelers_text">Be the first to help travelers!</string>
 </resources>

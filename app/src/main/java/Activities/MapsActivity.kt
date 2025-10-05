@@ -3,6 +3,7 @@ package Activities
 import android.Manifest
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.Handler
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
@@ -45,6 +46,10 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private var centerLocation: LatLng? = null
     private var pendingReports: List<SafetyReport>? = null
     private var isInitialLoad = true
+    private val CITY_NAME_KEY: String = "city"
+
+    // Store pending city search until map is ready
+    private var pendingCitySearch: String? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -71,11 +76,22 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             throw e
         }
 
-        // rest of your code...
+        // Store the city name FIRST before anything else
+        val cityName = intent.getStringExtra(CITY_NAME_KEY)
+        Log.d(TAG, "=== INTENT EXTRAS DEBUG ===")
+        Log.d(TAG, "City name from intent: '$cityName'")
+        Log.d(TAG, "Intent extras: ${intent.extras}")
+        Log.d(TAG, "Has CITY_NAME_KEY: ${intent.hasExtra(CITY_NAME_KEY)}")
 
+        if (!cityName.isNullOrEmpty()) {
+            pendingCitySearch = cityName.trim()
+            Log.d(TAG, "✓ Pending city search SET to: '$pendingCitySearch'")
+        } else {
+            pendingCitySearch = null
+            Log.d(TAG, "✗ No city name in intent or empty")
+        }
 
-
-
+        // Initialize components
         initializeComponents()
         authenticateUser()
         setupMapFragment()
@@ -207,8 +223,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         viewModel.centerLocation.observe(this) { location ->
-            centerLocation = location
-            location?.let { mapHelper?.animateToPosition(it, 14f) }
+            // Only update center location if there's no pending city search
+            if (pendingCitySearch == null) {
+                centerLocation = location
+                location?.let { mapHelper?.animateToPosition(it, 14f) }
+            }
         }
 
         viewModel.mapType.observe(this) { type ->
@@ -228,6 +247,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             Log.d(TAG, "Voted reports updated: ${votedIds.size} reports")
         }
     }
+
     private fun handleReportsUpdate(reports: List<SafetyReport>) {
         Log.d(TAG, "Handling ${reports.size} reports update")
         if (mapHelper != null) {
@@ -239,20 +259,88 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             pendingReports = reports
         }
     }
-    override fun onMapReady(googleMap: GoogleMap) {
-        Log.d(TAG, "Map is ready")
-        mapHelper = MapManagerHelper(googleMap, this)  // Pass 'this' as context
 
+    override fun onMapReady(googleMap: GoogleMap) {
+        Log.d(TAG, "========== onMapReady called ==========")
+        Log.d(TAG, "Current pendingCitySearch value: '$pendingCitySearch'")
+
+        mapHelper = MapManagerHelper(googleMap, this)
         configureMap(googleMap)
         setupMapListeners(googleMap)
-        checkLocationPermission()
-        applyPendingData()
 
-        // Set up report click listener
         mapHelper?.onReportClickListener = { reportId ->
             showViewReportDialog(reportId)
         }
+
+        applyPendingData()
+
+        // Handle pending city search or fallback to current location
+        val cityToSearch = pendingCitySearch
+        if (!cityToSearch.isNullOrEmpty()) {
+            Log.d(TAG, "✓ Processing pending city search: '$cityToSearch'")
+            pendingCitySearch = null // Clear BEFORE calling to prevent re-entry
+            searchLocationAndAnimate(cityToSearch)
+        } else {
+            Log.d(TAG, "✗ No pending city search, checking for current location")
+            checkLocationPermission()
+        }
     }
+
+    private fun searchLocationAndAnimate(cityName: String) {
+        Log.d(TAG, "========== searchLocationAndAnimate START ==========")
+        Log.d(TAG, "Searching for city: '$cityName'")
+        showLoading(true)
+
+        locationHelper.getLatLngFromLocationName(
+            cityName,
+            onSuccess = { latLng, address ->
+                // CRITICAL: Ensure we're on the main thread for UI updates
+                runOnUiThread {
+                    Log.d(TAG, "✓✓✓ City FOUND: '$address' at $latLng")
+                    Log.d(TAG, "Thread: ${Thread.currentThread().name}")
+                    showLoading(false)
+
+                    // Update the search bar to show the full address
+                    binding.autoCompleteSearch.setText(address)
+
+                    // Update center location FIRST
+                    centerLocation = latLng
+                    viewModel.setCenterLocation(latLng)
+
+                    // Ensure mapHelper exists and animate
+                    mapHelper?.let { helper ->
+                        Log.d(TAG, "MapHelper exists, animating camera to position: $latLng")
+
+                        // Add a temporary marker
+                        helper.addTemporaryMarker(latLng, address, "Long press to report safety")
+
+                        // Animate to the location with zoom level 12 (good for cities)
+                        helper.animateToPosition(latLng, 12f)
+
+                        // Load nearby reports
+                        viewModel.loadNearbyReports(latLng.latitude, latLng.longitude, 100.0)
+
+                        showToast("Viewing $address")
+                        Log.d(TAG, "✓ Camera animation triggered successfully")
+                    } ?: run {
+                        Log.e(TAG, "✗✗✗ MapHelper is NULL!")
+                        showToast("Map not ready")
+                    }
+                }
+            },
+            onFailure = { exception ->
+                runOnUiThread {
+                    showLoading(false)
+                    Log.e(TAG, "✗✗✗ City NOT FOUND: '$cityName'")
+                    Log.e(TAG, "Error: ${exception.message}")
+                    showToast("Could not find city: $cityName. Using your location instead.")
+                    // Fallback to current location
+                    checkLocationPermission()
+                }
+            }
+        )
+    }
+
     private fun applyPendingData() {
         pendingReports?.let { reports ->
             Log.d(TAG, "Applying ${reports.size} pending reports")
@@ -270,11 +358,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
             mapHelper?.setMapType(mapType)
         }
-
-        viewModel.centerLocation.value?.let { location ->
-            mapHelper?.animateToPosition(location, 14f)
-        }
     }
+
     private fun configureMap(map: GoogleMap) {
         map.mapType = GoogleMap.MAP_TYPE_NORMAL
         map.uiSettings.apply {
@@ -300,13 +385,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             handleMapLongClick(latLng)
         }
 
-        // Set cluster manager as the marker click listener
         map.setOnMarkerClickListener { marker ->
-            // Check if it's the temporary marker first
             if (marker.zIndex == 10f) {
-                false // Let the default behavior handle it
+                false
             } else {
-                // Let cluster manager handle it
+
                 mapHelper?.getClusterManager()?.onMarkerClick(marker) ?: false
             }
         }
@@ -315,8 +398,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             handleCameraIdle()
         }
     }
-
-
 
     private fun handleSearchTextChanged(text: CharSequence?, adapter: ArrayAdapter<String>) {
         if (!text.isNullOrEmpty()) {
@@ -358,12 +439,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun searchLocation(query: String) {
+        Log.d(TAG, "Searching for location: $query")
         locationHelper.getLatLngFromLocationName(
             query,
             onSuccess = { latLng, address ->
+                Log.d(TAG, "Location found: $address at $latLng")
                 updateLocationAndLoadReports(latLng, address)
             },
             onFailure = {
+                Log.e(TAG, "Location not found for query: $query")
                 showToast("Location not found")
             }
         )
@@ -399,8 +483,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 showLoading(false)
                 val latLng = LatLng(location.latitude, location.longitude)
                 centerLocation = latLng
-                mapHelper?.animateToPosition(latLng, 14f)
                 viewModel.setCenterLocation(latLng)
+                mapHelper?.animateToPosition(latLng, 14f)
                 viewModel.loadNearbyReports(location.latitude, location.longitude, 100.0)
                 showToast("Location found!")
             },
@@ -467,15 +551,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    private fun handleMapClick(latLng: LatLng) {
-        mapHelper?.addTemporaryMarker(latLng, "Selected Location", "Long press to report safety status")
-        mapHelper?.animateToPosition(latLng, 15f)
-
-        locationHelper.getAddressFromLocation(latLng) { address ->
-            showToast(address)
-        }
-    }
-
     private var lastReportLoadTime = 0L
     private val REPORT_LOAD_DELAY = 1000L // 1 second
 
@@ -495,7 +570,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
     }
-
 
     private fun showAddReportDialog(latLng: LatLng, areaName: String) {
         Log.d(TAG, "Showing add report dialog for: $areaName")
@@ -561,14 +635,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         )
     }
 
-    // Add this override method to your MapsActivity class:
     override fun onResume() {
         super.onResume()
 
-        if (locationHelper.isGpsEnabled() && centerLocation == null) {
+        // Only get current location if we don't have a center location AND no pending city search
+        if (locationHelper.isGpsEnabled() && centerLocation == null && pendingCitySearch == null) {
             checkLocationPermission()
         }
     }
+
     private fun showReportsBottomSheet() {
         val allReports = viewModel.reports.value ?: emptyList()
         val votedReportIds = viewModel.votedReports.value ?: emptySet()
@@ -637,5 +712,4 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     companion object {
         private const val TAG = "MapsActivity"
     }
-
 }

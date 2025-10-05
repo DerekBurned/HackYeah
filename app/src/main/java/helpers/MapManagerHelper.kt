@@ -147,11 +147,7 @@ class MapManagerHelper(
         }
     }
 
-    fun getFocusedReportId(): String? = focusedReportId
 
-    fun getMarkerPosition(reportId: String): LatLng? {
-        return reportItems[reportId]?.position
-    }
 
     fun addTemporaryMarker(latLng: LatLng, title: String, snippet: String): Marker? {
         currentMarker?.remove()

@@ -5,6 +5,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Address
 import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
@@ -83,37 +84,91 @@ class LocationManagerHelper(
     fun getLatLngFromLocationName(
         locationName: String,
         onSuccess: (LatLng, String) -> Unit,
-        onFailure: () -> Unit
+        onFailure: (Exception) -> Unit
     ) {
+        Log.d("LocationHelper", "========== getLatLngFromLocationName START ==========")
+        Log.d("LocationHelper", "Looking for location: '$locationName'")
+
         try {
             val geocoder = Geocoder(context, Locale.getDefault())
+            Log.d("LocationHelper", "Geocoder created successfully")
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                geocoder.getFromLocationName(locationName, 1) { addresses ->
-                    if (addresses.isNotEmpty()) {
-                        val address = addresses[0]
-                        val latLng = LatLng(address.latitude, address.longitude)
-                        val addressText = address.getAddressLine(0) ?: locationName
-                        onSuccess(latLng, addressText)
-                    } else {
-                        onFailure()
-                    }
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                val addresses = geocoder.getFromLocationName(locationName, 1)
-                if (addresses != null && addresses.isNotEmpty()) {
-                    val address = addresses[0]
-                    val latLng = LatLng(address.latitude, address.longitude)
-                    val addressText = address.getAddressLine(0) ?: locationName
-                    onSuccess(latLng, addressText)
-                } else {
-                    onFailure()
-                }
+            // Check if Geocoder is available
+            if (!Geocoder.isPresent()) {
+                Log.e("LocationHelper", "✗ Geocoder is NOT present on this device!")
+                onFailure(Exception("Geocoder not available on this device"))
+                return
             }
+
+            Log.d("LocationHelper", "Geocoder is present, starting search...")
+
+            // Use the new Geocoder API (Android API 33+) or fallback to old one
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                Log.d("LocationHelper", "Using new Geocoder API (Android 33+)")
+
+                geocoder.getFromLocationName(locationName, 5, object : Geocoder.GeocodeListener {
+                    override fun onGeocode(addresses: MutableList<Address>) {
+                        Log.d("LocationHelper", "Geocode callback received with ${addresses.size} addresses")
+
+                        if (addresses.isNotEmpty()) {
+                            val address = addresses[0]
+                            val latLng = LatLng(address.latitude, address.longitude)
+                            val addressText = address.getAddressLine(0) ?: locationName
+
+                            Log.d("LocationHelper", "✓✓✓ SUCCESS: Found $addressText at $latLng")
+                            onSuccess(latLng, addressText)
+                        } else {
+                            Log.e("LocationHelper", "✗✗✗ FAILURE: No addresses found")
+                            onFailure(Exception("Location not found: $locationName"))
+                        }
+                    }
+
+                    override fun onError(errorMessage: String?) {
+                        Log.e("LocationHelper", "✗✗✗ GEOCODE ERROR: $errorMessage")
+                        onFailure(Exception(errorMessage ?: "Geocoding failed"))
+                    }
+                })
+            } else {
+                Log.d("LocationHelper", "Using old Geocoder API (Android < 33)")
+
+                // Old API - run in background thread
+                Thread {
+                    try {
+                        Log.d("LocationHelper", "Calling getFromLocationName (blocking)...")
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocationName(locationName, 5)
+
+                        Log.d("LocationHelper", "Got ${addresses?.size ?: 0} addresses")
+
+                        if (!addresses.isNullOrEmpty()) {
+                            val address = addresses[0]
+                            val latLng = LatLng(address.latitude, address.longitude)
+                            val addressText = address.getAddressLine(0) ?: locationName
+
+                            Log.d("LocationHelper", "✓✓✓ SUCCESS: Found $addressText at $latLng")
+
+                            // Post result to main thread
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                onSuccess(latLng, addressText)
+                            }
+                        } else {
+                            Log.e("LocationHelper", "✗✗✗ FAILURE: No addresses found")
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                onFailure(Exception("Location not found: $locationName"))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("LocationHelper", "✗✗✗ EXCEPTION in geocoding: ${e.message}", e)
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            onFailure(e)
+                        }
+                    }
+                }.start()
+            }
+
         } catch (e: Exception) {
-            Log.e("LocationHelper", "Error: ${e.message}")
-            onFailure()
+            Log.e("LocationHelper", "✗✗✗ EXCEPTION creating Geocoder: ${e.message}", e)
+            onFailure(e)
         }
     }
 

@@ -52,6 +52,7 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(platform(libs.firebase.bom))
     // Material Design
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.material)
     implementation(libs.androidx.coordinatorlayout)
     implementation("com.google.maps.android:android-maps-utils:3.8.2")

@@ -18,7 +18,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Nearby Safety Reports"
+            android:text="@string/tv_nearby_safety_reports_text"
             android:textSize="20sp"
             android:textStyle="bold"/>
 
@@ -26,8 +26,8 @@
             android:id="@+id/btnSort"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Sort"
-            android:drawableLeft="@android:drawable/ic_menu_sort_by_size"
+            android:text="@string/tv_sort_text"
+            android:drawableStart="@android:drawable/ic_menu_sort_by_size"
             android:drawablePadding="8dp"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_marginEnd="8dp"/>
@@ -36,7 +36,7 @@
             android:id="@+id/btnClose"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Close"
+            android:text="@string/tv_close_close"
             style="@style/Widget.Material3.Button.TextButton"/>
     </LinearLayout>
 
@@ -52,7 +52,7 @@
         android:id="@+id/tvSortInfo"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Sorted by: Most Dangerous First"
+        android:text="@string/tv_sorted_by_most_dangerous_first_text"
         android:textSize="12sp"
         android:textColor="#666666"
         android:paddingBottom="12dp"
@@ -74,12 +74,12 @@
             android:src="@android:drawable/ic_menu_search"
             android:alpha="0.3"
             android:layout_marginBottom="16dp"
-            android:contentDescription="No reports"/>
+            android:contentDescription="@string/tv_no_reports_description"/>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="No reports in this area yet"
+            android:text="@string/tv_no_reports_in_this_area_yet_text"
             android:textSize="16sp"
             android:textColor="#666666"
             android:layout_marginBottom="8dp"/>
@@ -87,7 +87,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Be the first to help travelers!"
+            android:text="@string/tv_be_the_first_to_help_travelers_text"
             android:textSize="14sp"
             android:textColor="#999999"/>
     </LinearLayout>
