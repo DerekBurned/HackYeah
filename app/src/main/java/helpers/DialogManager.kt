@@ -1,8 +1,10 @@
 package com.example.travelnow.helpers
 
 import android.content.Context
+import android.util.Log
 import android.view.LayoutInflater
 import android.widget.SeekBar
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.travelnow.SafetyReportAdapter
@@ -18,15 +20,19 @@ import models.SafetyReport
 
 class DialogManager(private val context: Context) {
 
+    private var currentAdapter: SafetyReportAdapter? = null
+
     fun showSafetyReportDialog(
         latLng: LatLng,
         areaName: String,
         onSubmit: (SafetyLevel, String, Int) -> Unit
     ) {
+        Log.d(TAG, "Creating safety report dialog")
         val dialogBinding = DialogSafetyReportBinding.inflate(LayoutInflater.from(context))
         val dialog = AlertDialog.Builder(context)
             .setView(dialogBinding.root)
             .setTitle("Report Safety Status")
+            .setCancelable(true)
             .create()
 
         with(dialogBinding) {
@@ -40,8 +46,6 @@ class DialogManager(private val context: Context) {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     val radius = if (progress < 50) 50 else progress
                     tvRadiusValue.text = "${radius}m"
-                    val alpha = 1.0f - (progress / 1000f * 0.5f)
-                    dialog.window?.setDimAmount(alpha * 0.5f)
                 }
 
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -52,8 +56,11 @@ class DialogManager(private val context: Context) {
                 val radius = if (seekBarRadius.progress < 50) 50 else seekBarRadius.progress
                 val comment = etComment.text.toString()
                 if (comment.isNotBlank()) {
+                    Log.d(TAG, "Submitting report with level: $level")
                     onSubmit(level, comment, radius)
                     dialog.dismiss()
+                } else {
+                    Toast.makeText(context, "Please add a comment", Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -67,11 +74,13 @@ class DialogManager(private val context: Context) {
             }
         }
 
+        Log.d(TAG, "Showing safety report dialog")
         dialog.show()
     }
 
     fun showViewReportDialog(
         report: SafetyReport,
+        hasVoted: Boolean,
         onUpvote: () -> Unit,
         onDownvote: () -> Unit
     ) {
@@ -96,14 +105,30 @@ class DialogManager(private val context: Context) {
             val voteCount = report.upvotes - report.downvotes
             tvVoteCount.text = voteCount.toString()
 
+            btnUpvote.isEnabled = !hasVoted
+            btnDownvote.isEnabled = !hasVoted
+
+            if (hasVoted) {
+                btnUpvote.alpha = 0.5f
+                btnDownvote.alpha = 0.5f
+            }
+
             btnUpvote.setOnClickListener {
-                onUpvote()
-                dialog.dismiss()
+                if (!hasVoted) {
+                    onUpvote()
+                    dialog.dismiss()
+                } else {
+                    Toast.makeText(context, "You have already voted on this report", Toast.LENGTH_SHORT).show()
+                }
             }
 
             btnDownvote.setOnClickListener {
-                onDownvote()
-                dialog.dismiss()
+                if (!hasVoted) {
+                    onDownvote()
+                    dialog.dismiss()
+                } else {
+                    Toast.makeText(context, "You have already voted on this report", Toast.LENGTH_SHORT).show()
+                }
             }
 
             btnClose.setOnClickListener {
@@ -116,45 +141,58 @@ class DialogManager(private val context: Context) {
 
     fun showReportsBottomSheet(
         reports: List<SafetyReport>,
+        votedReportIds: Set<String>,
         currentSort: SortOptions,
         onSort: (SortOptions) -> Unit,
         onUpvote: (SafetyReport) -> Unit,
         onDownvote: (SafetyReport) -> Unit,
         onItemClick: (SafetyReport) -> Unit
     ): BottomSheetDialog {
+        Log.d(TAG, "Creating bottom sheet with ${reports.size} reports")
         val bottomSheetDialog = BottomSheetDialog(context)
         val sheetBinding = BottomSheetReportsBinding.inflate(LayoutInflater.from(context))
 
-        val adapter = SafetyReportAdapter(
-            onUpvoteClick = onUpvote,
-            onDownvoteClick = onDownvote,
-            onItemClick = onItemClick
-        )
-
-        with(sheetBinding) {
-            recyclerViewReports.layoutManager = LinearLayoutManager(context)
-            recyclerViewReports.adapter = adapter
-
-            tvSortInfo.text = "Sorted by: ${getSortName(currentSort)}"
-
-            if (reports.isEmpty()) {
-                recyclerViewReports.visibility = android.view.View.GONE
-                tvNoReports.visibility = android.view.View.VISIBLE
-            } else {
-                recyclerViewReports.visibility = android.view.View.VISIBLE
-                tvNoReports.visibility = android.view.View.GONE
-                adapter.updateReports(reports)
-            }
-
-            btnSort.setOnClickListener {
-                showSortDialog(currentSort) { sortOption ->
-                    onSort(sortOption)
-                    tvSortInfo.text = "Sorted by: ${getSortName(sortOption)}"
+        if (currentAdapter == null) {
+            currentAdapter = SafetyReportAdapter(
+                onUpvoteClick = onUpvote,
+                onDownvoteClick = onDownvote,
+                onItemClick = { report ->
+                    onItemClick(report)
+                    bottomSheetDialog.dismiss()
                 }
-            }
+            )
+        }
 
-            btnClose.setOnClickListener {
-                bottomSheetDialog.dismiss()
+        currentAdapter?.let { adapter ->
+            adapter.setVotedReports(votedReportIds)
+
+            with(sheetBinding) {
+                recyclerViewReports.layoutManager = LinearLayoutManager(context)
+                recyclerViewReports.adapter = adapter
+
+                tvSortInfo.text = "Sorted by: ${getSortName(currentSort)}"
+
+                if (reports.isEmpty()) {
+                    Log.d(TAG, "No reports to display")
+                    recyclerViewReports.visibility = android.view.View.GONE
+                    tvNoReports.visibility = android.view.View.VISIBLE
+                } else {
+                    Log.d(TAG, "Displaying ${reports.size} reports")
+                    recyclerViewReports.visibility = android.view.View.VISIBLE
+                    tvNoReports.visibility = android.view.View.GONE
+                    adapter.updateReports(reports)
+                }
+
+                btnSort.setOnClickListener {
+                    showSortDialog(currentSort) { sortOption ->
+                        onSort(sortOption)
+                        bottomSheetDialog.dismiss()
+                    }
+                }
+
+                btnClose.setOnClickListener {
+                    bottomSheetDialog.dismiss()
+                }
             }
         }
 
@@ -193,8 +231,9 @@ class DialogManager(private val context: Context) {
         val options = arrayOf("Normal", "Satellite", "Terrain", "Hybrid")
         AlertDialog.Builder(context)
             .setTitle("Select Map Type")
-            .setItems(options) { _, which ->
+            .setSingleChoiceItems(options, currentType) { dialog, which ->
                 onSelected(which)
+                dialog.dismiss()
             }
             .show()
     }
@@ -208,5 +247,9 @@ class DialogManager(private val context: Context) {
             SortOptions.VOTES_HIGH -> "Highest Votes"
             SortOptions.VOTES_LOW -> "Lowest Votes"
         }
+    }
+
+    companion object {
+        private const val TAG = "DialogManager"
     }
 }

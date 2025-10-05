@@ -24,13 +24,13 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import models.SafetyLevel
 import models.SafetyReport
+
 @SuppressLint("MissingPermission")
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var binding: ActivityMapsBinding
     private lateinit var auth: FirebaseAuth
 
-    // Helpers
     private lateinit var locationHelper: LocationManagerHelper
     private lateinit var placesHelper: PlacesSearchHelper
     private lateinit var dialogManager: DialogManager
@@ -40,12 +40,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         (application as MyApplication).safetyViewModel
     }
 
-    // State
     private var currentSortOption = SortOptions.DANGER_LEVEL_DESC
     private var centerLocation: LatLng? = null
     private var pendingReports: List<SafetyReport>? = null
+    private var isInitialLoad = true
 
-    // Permission launcher
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -160,11 +159,17 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun setupObservers() {
         viewModel.reports.observe(this) { reports ->
+            Log.d(TAG, "Reports observer triggered with ${reports.size} reports")
             handleReportsUpdate(reports)
         }
 
         viewModel.loading.observe(this) { isLoading ->
-            showLoading(isLoading)
+            if (isInitialLoad) {
+                showLoading(isLoading)
+                if (!isLoading) {
+                    isInitialLoad = false
+                }
+            }
         }
 
         viewModel.error.observe(this) { error ->
@@ -191,11 +196,25 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         viewModel.mapType.observe(this) { type ->
-            type?.let { mapHelper?.setMapType(it) }
+            type?.let {
+                val mapType = when (type) {
+                    0 -> GoogleMap.MAP_TYPE_NORMAL
+                    1 -> GoogleMap.MAP_TYPE_SATELLITE
+                    2 -> GoogleMap.MAP_TYPE_TERRAIN
+                    3 -> GoogleMap.MAP_TYPE_HYBRID
+                    else -> GoogleMap.MAP_TYPE_NORMAL
+                }
+                mapHelper?.setMapType(mapType)
+            }
+        }
+
+        viewModel.votedReports.observe(this) { votedIds ->
+            Log.d(TAG, "Voted reports updated: ${votedIds.size} reports")
         }
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
+        Log.d(TAG, "Map is ready")
         mapHelper = MapManagerHelper(googleMap)
 
         configureMap(googleMap)
@@ -224,6 +243,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun setupMapListeners(map: GoogleMap) {
         map.setOnMapLongClickListener { latLng ->
+            Log.d(TAG, "Map long clicked at: $latLng")
             handleMapLongClick(latLng)
         }
 
@@ -248,7 +268,14 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         viewModel.mapType.value?.let { type ->
-            mapHelper?.setMapType(type)
+            val mapType = when (type) {
+                0 -> GoogleMap.MAP_TYPE_NORMAL
+                1 -> GoogleMap.MAP_TYPE_SATELLITE
+                2 -> GoogleMap.MAP_TYPE_TERRAIN
+                3 -> GoogleMap.MAP_TYPE_HYBRID
+                else -> GoogleMap.MAP_TYPE_NORMAL
+            }
+            mapHelper?.setMapType(mapType)
         }
 
         viewModel.centerLocation.value?.let { location ->
@@ -256,7 +283,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    // Search Functionality
     private fun handleSearchTextChanged(text: CharSequence?, adapter: ArrayAdapter<String>) {
         if (!text.isNullOrEmpty()) {
             binding.clearSearch.visibility = View.VISIBLE
@@ -289,7 +315,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             onSuccess = { latLng, address ->
                 updateLocationAndLoadReports(latLng, address)
                 placesHelper.resetSession()
-                binding.autoCompleteSearch.text.clear()
             },
             onFailure = {
                 showToast("Could not find location")
@@ -316,8 +341,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         viewModel.setCenterLocation(latLng)
         viewModel.loadNearbyReports(latLng.latitude, latLng.longitude, 100.0)
     }
-
-    // Location Functionality
 
     private fun checkLocationPermission() {
         if (locationHelper.hasLocationPermission()) {
@@ -348,12 +371,30 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         )
     }
 
-    // Map Event Handlers
     private fun handleMapLongClick(latLng: LatLng) {
-        showLoading(true)
+        Log.d(TAG, "Map long clicked at: $latLng")
+        Log.d(TAG, "Getting address for long click")
+
+        var callbackExecuted = false
+
+        val timeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val timeoutRunnable = Runnable {
+            if (!callbackExecuted) {
+                Log.w(TAG, "Geocoder timeout, using default location name")
+                callbackExecuted = true
+                showAddReportDialog(latLng, "Selected Location")
+            }
+        }
+
+        timeoutHandler.postDelayed(timeoutRunnable, 3000)
+
         locationHelper.getAddressFromLocation(latLng) { areaName ->
-            showLoading(false)
-            showAddReportDialog(latLng, areaName)
+            if (!callbackExecuted) {
+                callbackExecuted = true
+                timeoutHandler.removeCallbacks(timeoutRunnable)
+                Log.d(TAG, "Address received: $areaName")
+                showAddReportDialog(latLng, areaName)
+            }
         }
     }
 
@@ -384,18 +425,20 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    // Reports Management
     private fun handleReportsUpdate(reports: List<SafetyReport>) {
+        Log.d(TAG, "Handling ${reports.size} reports update")
         if (mapHelper != null) {
+            Log.d(TAG, "MapHelper is ready, updating reports")
             mapHelper?.updateReports(reports)
             pendingReports = null
         } else {
+            Log.d(TAG, "MapHelper not ready, storing pending reports")
             pendingReports = reports
-            Log.d(TAG, "Map not ready, storing ${reports.size} pending reports")
         }
     }
 
     private fun showAddReportDialog(latLng: LatLng, areaName: String) {
+        Log.d(TAG, "Showing add report dialog for: $areaName")
         dialogManager.showSafetyReportDialog(
             latLng = latLng,
             areaName = areaName,
@@ -407,16 +450,16 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun showViewReportDialog(reportId: String) {
         val report = viewModel.reports.value?.find { it.id == reportId } ?: return
+        val hasVoted = viewModel.hasUserVoted(reportId)
 
         dialogManager.showViewReportDialog(
             report = report,
+            hasVoted = hasVoted,
             onUpvote = {
                 viewModel.voteOnReport(reportId, true)
-                showToast("Upvoted!")
             },
             onDownvote = {
                 viewModel.voteOnReport(reportId, false)
-                showToast("Downvoted!")
             }
         )
     }
@@ -445,44 +488,35 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun showReportsBottomSheet() {
         val allReports = viewModel.reports.value ?: emptyList()
+        val votedReportIds = viewModel.votedReports.value ?: emptySet()
+        Log.d(TAG, "Showing bottom sheet with ${allReports.size} reports, ${votedReportIds.size} voted")
         val sortedReports = ReportSorter.sort(allReports, currentSortOption)
 
-        dialogManager.showReportsBottomSheet(
+        val bottomSheet = dialogManager.showReportsBottomSheet(
             reports = sortedReports,
+            votedReportIds = votedReportIds,
             currentSort = currentSortOption,
             onSort = { sortOption ->
                 currentSortOption = sortOption
-                val newSorted = ReportSorter.sort(allReports, sortOption)
-                showReportsBottomSheet() // Refresh sheet with new sort
+                showReportsBottomSheet()
             },
             onUpvote = { report ->
                 viewModel.voteOnReport(report.id, true)
-                showToast("Upvoted ${report.areaName}")
             },
             onDownvote = { report ->
                 viewModel.voteOnReport(report.id, false)
-                showToast("Downvoted ${report.areaName}")
             },
             onItemClick = { report ->
                 mapHelper?.setFocusedReport(report.id)
             }
         )
+        bottomSheet.show()
     }
 
-    // UI Actions
     private fun showMapTypeDialog() {
         val currentType = viewModel.mapType.value ?: 0
         dialogManager.showMapTypeDialog(currentType) { type ->
             viewModel.setMapType(type)
-            mapHelper?.setMapType(
-                when (type) {
-                    0 -> GoogleMap.MAP_TYPE_NORMAL
-                    1 -> GoogleMap.MAP_TYPE_SATELLITE
-                    2 -> GoogleMap.MAP_TYPE_TERRAIN
-                    3 -> GoogleMap.MAP_TYPE_HYBRID
-                    else -> GoogleMap.MAP_TYPE_NORMAL
-                }
-            )
         }
     }
 
@@ -503,7 +537,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         showToast("Refreshing reports...")
     }
 
-    // Utility Methods
     private fun showLoading(show: Boolean) {
         binding.progressBar.visibility = if (show) View.VISIBLE else View.GONE
     }

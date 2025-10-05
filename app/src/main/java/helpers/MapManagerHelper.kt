@@ -7,6 +7,7 @@ import com.google.android.gms.maps.model.*
 import models.SafetyLevel
 import models.SafetyReport
 
+
 class MapManagerHelper(private val map: GoogleMap) {
 
     private val reportMarkers = mutableMapOf<String, Marker>()
@@ -23,6 +24,8 @@ class MapManagerHelper(private val map: GoogleMap) {
             500.0
         }
 
+        Log.d(TAG, "Adding report to map: ${report.id} at $latLng with radius $circleRadius")
+
         val circle = map.addCircle(
             CircleOptions()
                 .center(latLng)
@@ -31,7 +34,8 @@ class MapManagerHelper(private val map: GoogleMap) {
                 .strokeColor(safetyLevel.color)
                 .fillColor(safetyLevel.colorWithAlpha)
                 .clickable(true)
-                .visible(focusedReportId == null || focusedReportId == report.id)
+                .visible(true)
+                .zIndex(1f)
         )
 
         val marker = map.addMarker(
@@ -40,34 +44,38 @@ class MapManagerHelper(private val map: GoogleMap) {
                 .title(safetyLevel.displayName)
                 .snippet(report.comment)
                 .icon(BitmapDescriptorFactory.defaultMarker(getMarkerHue(safetyLevel)))
+                .visible(true)
+                .zIndex(2f)
         )
 
         marker?.tag = report.id
         if (marker != null) {
             reportMarkers[report.id] = marker
             reportCircles[report.id] = circle
+            Log.d(TAG, "Successfully added marker and circle for report ${report.id}")
+        } else {
+            Log.e(TAG, "Failed to create marker for report ${report.id}")
         }
     }
 
     fun updateReports(reports: List<SafetyReport>) {
+        Log.d(TAG, "Updating reports on map. Received ${reports.size} reports")
         val newReportIds = reports.map { it.id }.toSet()
         val currentReportIds = reportMarkers.keys.toSet()
 
-        // Remove old markers
         val toRemove = currentReportIds - newReportIds
+        Log.d(TAG, "Removing ${toRemove.size} old reports")
         toRemove.forEach { reportId ->
             removeReport(reportId)
         }
 
-        // Add new markers
-        reports.forEach { report ->
-            if (report.id !in currentReportIds) {
-                addReportToMap(report)
-            }
+        val toAdd = reports.filter { it.id !in currentReportIds }
+        Log.d(TAG, "Adding ${toAdd.size} new reports")
+        toAdd.forEach { report ->
+            addReportToMap(report)
         }
 
-        updateCircleVisibility()
-        Log.d(TAG, "Updated ${reports.size} reports on map")
+        Log.d(TAG, "Map now has ${reportMarkers.size} markers and ${reportCircles.size} circles")
     }
 
     fun removeReport(reportId: String) {
@@ -75,6 +83,7 @@ class MapManagerHelper(private val map: GoogleMap) {
         reportCircles[reportId]?.remove()
         reportMarkers.remove(reportId)
         reportCircles.remove(reportId)
+        Log.d(TAG, "Removed report: $reportId")
     }
 
     fun clearAllReports() {
@@ -83,11 +92,11 @@ class MapManagerHelper(private val map: GoogleMap) {
         reportMarkers.clear()
         reportCircles.clear()
         focusedReportId = null
+        Log.d(TAG, "Cleared all reports from map")
     }
 
     fun setFocusedReport(reportId: String?) {
         focusedReportId = if (focusedReportId == reportId) null else reportId
-        updateCircleVisibility()
 
         reportId?.let {
             reportMarkers[it]?.let { marker ->
@@ -125,6 +134,7 @@ class MapManagerHelper(private val map: GoogleMap) {
 
     fun setMapType(type: Int) {
         map.mapType = type
+        Log.d(TAG, "Map type changed to: $type")
     }
 
     fun zoomIn() {
@@ -143,12 +153,6 @@ class MapManagerHelper(private val map: GoogleMap) {
         return map.cameraPosition.zoom
     }
 
-    private fun updateCircleVisibility() {
-        reportCircles.forEach { (reportId, circle) ->
-            circle.isVisible = focusedReportId == null || focusedReportId == reportId
-        }
-    }
-
     private fun getMarkerHue(safetyLevel: SafetyLevel): Float {
         return when (safetyLevel) {
             SafetyLevel.SAFE -> BitmapDescriptorFactory.HUE_GREEN
@@ -163,3 +167,4 @@ class MapManagerHelper(private val map: GoogleMap) {
         private const val TAG = "MapManagerHelper"
     }
 }
+

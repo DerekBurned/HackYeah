@@ -9,6 +9,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.travelnow.databinding.ItemSafetyReportBinding
 import models.SafetyReport
 
+
+
+
 class SafetyReportAdapter(
     private val onUpvoteClick: (SafetyReport) -> Unit,
     private val onDownvoteClick: (SafetyReport) -> Unit,
@@ -16,6 +19,7 @@ class SafetyReportAdapter(
 ) : RecyclerView.Adapter<SafetyReportAdapter.ReportViewHolder>() {
 
     private var reports = listOf<SafetyReport>()
+    private var votedReportIds = setOf<String>()
 
     inner class ReportViewHolder(private val binding: ItemSafetyReportBinding) :
         RecyclerView.ViewHolder(binding.root) {
@@ -34,35 +38,31 @@ class SafetyReportAdapter(
             val voteCount = report.upvotes - report.downvotes
             binding.tvVoteCount.text = voteCount.toString()
 
-            binding.btnUpvote.setOnClickListener { onUpvoteClick(report)
-            if(!binding.btnDownvote.isEnabled){
-                binding.btnDownvote.isEnabled = true
-                binding.btnUpvote.isEnabled = false
-            } else{
-                binding.btnUpvote.isEnabled = false
-            }
-               increaseDecreaseCOunter(binding.tvVoteCount, true)
+            val hasVoted = votedReportIds.contains(report.id)
+            binding.btnUpvote.isEnabled = !hasVoted
+            binding.btnDownvote.isEnabled = !hasVoted
 
+            if (hasVoted) {
+                binding.btnUpvote.alpha = 0.5f
+                binding.btnDownvote.alpha = 0.5f
+            } else {
+                binding.btnUpvote.alpha = 1.0f
+                binding.btnDownvote.alpha = 1.0f
             }
-            binding.btnDownvote.setOnClickListener { onDownvoteClick(report)
-                if(!binding.btnUpvote.isEnabled){
-                    binding.btnUpvote.isEnabled = true
-                    binding.btnDownvote.isEnabled = false
-                } else{
-                    binding.btnDownvote.isEnabled = false
+
+            binding.btnUpvote.setOnClickListener {
+                if (!hasVoted) {
+                    onUpvoteClick(report)
                 }
-                increaseDecreaseCOunter(binding.tvVoteCount, false)
-
             }
-            binding.root.setOnClickListener { onItemClick(report) }
-        }
-    }
-    private fun increaseDecreaseCOunter(view: TextView, upvote: Boolean){
-        if(upvote) {
-            view.text = view.text.let { (it.toString().toIntOrNull()?.plus(1) ?: 1).toString() }
-        }else{
-            view.text = view.text.let { (it.toString().toIntOrNull()?.minus(1) ?: 1).toString() }
 
+            binding.btnDownvote.setOnClickListener {
+                if (!hasVoted) {
+                    onDownvoteClick(report)
+                }
+            }
+
+            binding.root.setOnClickListener { onItemClick(report) }
         }
     }
 
@@ -86,6 +86,11 @@ class SafetyReportAdapter(
         val diffResult = DiffUtil.calculateDiff(diffCallback)
         reports = newReports
         diffResult.dispatchUpdatesTo(this)
+    }
+
+    fun setVotedReports(voted: Set<String>) {
+        this.votedReportIds = voted
+        notifyDataSetChanged()
     }
 
     private class ReportDiffCallback(

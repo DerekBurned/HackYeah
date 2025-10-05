@@ -9,10 +9,12 @@ import kotlinx.coroutines.tasks.await
 import models.SafetyReport
 import utils.GeoUtils
 
+
 class SafetyRepository {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     private val reportsCollection = db.collection("safety_reports")
+    private val votesCollection = db.collection("votes")
 
     private suspend fun ensureAuthenticated(): Boolean {
         return try {
@@ -150,6 +152,21 @@ class SafetyRepository {
         return try {
             Log.d("SafetyRepository", "Voting on report $reportId (upvote: $isUpvote)")
 
+            if (!ensureAuthenticated()) {
+                return Result.failure(Exception("Not authenticated"))
+            }
+
+            val userId = auth.currentUser?.uid ?: return Result.failure(Exception("Not authenticated"))
+
+            val voteId = "${userId}_${reportId}"
+            val voteRef = votesCollection.document(voteId)
+
+            val existingVote = voteRef.get().await()
+            if (existingVote.exists()) {
+                Log.d("SafetyRepository", "User has already voted on this report")
+                return Result.failure(Exception("You have already voted on this report"))
+            }
+
             val reportRef = reportsCollection.document(reportId)
             val field = if (isUpvote) "upvotes" else "downvotes"
 
@@ -160,6 +177,13 @@ class SafetyRepository {
                 }
                 val currentValue = snapshot.getLong(field) ?: 0
                 transaction.update(reportRef, field, currentValue + 1)
+
+                transaction.set(voteRef, hashMapOf(
+                    "userId" to userId,
+                    "reportId" to reportId,
+                    "isUpvote" to isUpvote,
+                    "timestamp" to FieldValue.serverTimestamp()
+                ))
             }.await()
 
             Log.d("SafetyRepository", "Vote recorded successfully")
@@ -167,6 +191,51 @@ class SafetyRepository {
         } catch (e: Exception) {
             Log.e("SafetyRepository", "Error voting on report: ${e.message}", e)
             Result.failure(e)
+        }
+    }
+
+    suspend fun hasUserVoted(reportId: String): Result<Boolean> {
+        return try {
+            if (!ensureAuthenticated()) {
+                return Result.success(false)
+            }
+
+            val userId = auth.currentUser?.uid ?: return Result.success(false)
+            val voteId = "${userId}_${reportId}"
+            val voteRef = votesCollection.document(voteId)
+
+            val vote = voteRef.get().await()
+            Result.success(vote.exists())
+        } catch (e: Exception) {
+            Log.e("SafetyRepository", "Error checking vote: ${e.message}", e)
+            Result.success(false)
+        }
+    }
+
+    suspend fun getUserVotes(reportIds: List<String>): Result<Set<String>> {
+        return try {
+            if (!ensureAuthenticated()) {
+                return Result.success(emptySet())
+            }
+
+            val userId = auth.currentUser?.uid ?: return Result.success(emptySet())
+
+            val votedReports = mutableSetOf<String>()
+
+            for (reportId in reportIds) {
+                val voteId = "${userId}_${reportId}"
+                val voteRef = votesCollection.document(voteId)
+                val vote = voteRef.get().await()
+                if (vote.exists()) {
+                    votedReports.add(reportId)
+                }
+            }
+
+            Log.d("SafetyRepository", "Found ${votedReports.size} voted reports")
+            Result.success(votedReports)
+        } catch (e: Exception) {
+            Log.e("SafetyRepository", "Error getting user votes: ${e.message}", e)
+            Result.success(emptySet())
         }
     }
 
@@ -191,6 +260,14 @@ class SafetyRepository {
 
             if (reportUserId == userId) {
                 reportsCollection.document(reportId).delete().await()
+
+                votesCollection
+                    .whereEqualTo("reportId", reportId)
+                    .get()
+                    .await()
+                    .documents
+                    .forEach { it.reference.delete() }
+
                 Log.d("SafetyRepository", "Report deleted successfully")
                 Result.success(Unit)
             } else {

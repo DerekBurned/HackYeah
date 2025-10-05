@@ -16,6 +16,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.tasks.CancellationTokenSource
 import java.util.Locale
 
+
 class LocationManagerHelper(
     private val context: Context,
     private val fusedLocationClient: FusedLocationProviderClient
@@ -60,22 +61,51 @@ class LocationManagerHelper(
         latLng: LatLng,
         callback: (String) -> Unit
     ) {
+        Log.d(TAG, "getAddressFromLocation called for: $latLng")
         try {
             val geocoder = Geocoder(context, Locale.getDefault())
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Log.d(TAG, "Using new Geocoder API (Android 13+)")
                 geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1) { addresses ->
-                    val address = addresses.firstOrNull()?.getAddressLine(0) ?: "Unknown Location"
-                    callback(address)
+                    Log.d(TAG, "Geocoder callback received, addresses count: ${addresses.size}")
+                    val address = if (addresses.isNotEmpty()) {
+                        addresses.firstOrNull()?.getAddressLine(0) ?: "Unknown Location"
+                    } else {
+                        "Unknown Location"
+                    }
+                    Log.d(TAG, "Address found: $address")
+
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        callback(address)
+                    }
                 }
             } else {
-                @Suppress("DEPRECATION")
-                val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-                val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "Unknown Location"
-                callback(address)
+                Log.d(TAG, "Using old Geocoder API (Android 12 and below)")
+                Thread {
+                    try {
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+                        val address = if (addresses != null && addresses.isNotEmpty()) {
+                            addresses.firstOrNull()?.getAddressLine(0) ?: "Unknown Location"
+                        } else {
+                            "Unknown Location"
+                        }
+                        Log.d(TAG, "Address found: $address")
+
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            callback(address)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Geocoder error in thread: ${e.message}", e)
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            callback("Unknown Location")
+                        }
+                    }
+                }.start()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Geocoder error: ${e.message}")
+            Log.e(TAG, "Geocoder error: ${e.message}", e)
             callback("Unknown Location")
         }
     }
@@ -85,6 +115,7 @@ class LocationManagerHelper(
         onSuccess: (LatLng, String) -> Unit,
         onFailure: () -> Unit
     ) {
+        Log.d(TAG, "getLatLngFromLocationName called for: $locationName")
         try {
             val geocoder = Geocoder(context, Locale.getDefault())
 
@@ -94,25 +125,48 @@ class LocationManagerHelper(
                         val address = addresses[0]
                         val latLng = LatLng(address.latitude, address.longitude)
                         val addressText = address.getAddressLine(0) ?: locationName
-                        onSuccess(latLng, addressText)
+                        Log.d(TAG, "Location found: $latLng")
+
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            onSuccess(latLng, addressText)
+                        }
                     } else {
-                        onFailure()
+                        Log.d(TAG, "No location found for: $locationName")
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            onFailure()
+                        }
                     }
                 }
             } else {
-                @Suppress("DEPRECATION")
-                val addresses = geocoder.getFromLocationName(locationName, 1)
-                if (addresses != null && addresses.isNotEmpty()) {
-                    val address = addresses[0]
-                    val latLng = LatLng(address.latitude, address.longitude)
-                    val addressText = address.getAddressLine(0) ?: locationName
-                    onSuccess(latLng, addressText)
-                } else {
-                    onFailure()
-                }
+                Thread {
+                    try {
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocationName(locationName, 1)
+                        if (addresses != null && addresses.isNotEmpty()) {
+                            val address = addresses[0]
+                            val latLng = LatLng(address.latitude, address.longitude)
+                            val addressText = address.getAddressLine(0) ?: locationName
+                            Log.d(TAG, "Location found: $latLng")
+
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                onSuccess(latLng, addressText)
+                            }
+                        } else {
+                            Log.d(TAG, "No location found for: $locationName")
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                onFailure()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Location search error in thread: ${e.message}", e)
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            onFailure()
+                        }
+                    }
+                }.start()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Location search error: ${e.message}")
+            Log.e(TAG, "Location search error: ${e.message}", e)
             onFailure()
         }
     }
