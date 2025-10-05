@@ -28,4 +28,18 @@
     <string name="tv_no_reports_description">No reports</string>
     <string name="tv_no_reports_in_this_area_yet_text">No reports in this area yet</string>
     <string name="tv_be_the_first_to_help_travelers_text">Be the first to help travelers!</string>
+    <string name="tv_loading_location_text">Loading location...</string>
+    <string name="tv_how_safe_is_this_area_text">How safe is this area?</string>
+    <string name="btn_safe_text">✓ Safe</string>
+    <string name="btn_be_cautious_text">⚠ Be Cautious</string>
+    <string name="btn_unsafe_text">⚡ Unsafe</string>
+    <string name="btn_dangerous_text">✕ Dangerous</string>
+    <string name="tv_area_coverage_radius_text">Area Coverage Radius</string>
+    <string name="tv_comment_hint">Tell others why (required)</string>
+    <string name="tv_slidebar_instruction_text">💡 Adjust the slider to set how large an area this report covers</string>
+    <string name="tv_be_specific_mention_time_of_day_what_you_saw_etc_text">💡 Be specific: mention time of day, what you saw, etc.</string>
+    <string name="btn_cancel_text">Cancel</string>
+    <string name="tv_anonymous_user_text">Anonymous User</string>
+    <string name="img_btn_upvote_description">Upvote</string>
+    <string name="img_dmg_downvote_text">Downvote</string>
 </resources>

@@ -156,7 +156,7 @@ class MapManagerHelper(
                 .position(latLng)
                 .title(title)
                 .snippet(snippet)
-                .draggable(true)
+                .draggable(false)
                 .zIndex(10f)
         )
         return currentMarker

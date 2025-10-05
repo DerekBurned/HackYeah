@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_margin="8dp"
     app:cardCornerRadius="12dp"
     app:cardElevation="2dp">
@@ -34,7 +34,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Safe"
+                android:text="@string/tv_safe_text"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:textColor="#4CAF50"/>
@@ -43,27 +43,25 @@
                 android:id="@+id/tvTimestamp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="2 days ago"
+                tools:text="2 days ago"
                 android:textSize="12sp"
                 android:textColor="#999999"/>
         </LinearLayout>
 
-        <!-- Location Name -->
         <TextView
             android:id="@+id/tvAreaName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Downtown Area"
+            tools:text="Downtown Area"
             android:textSize="14sp"
             android:textStyle="bold"
             android:layout_marginBottom="8dp"/>
 
-        <!-- Comment -->
         <TextView
             android:id="@+id/tvComment"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Very safe during daytime. Lots of police presence and well-lit streets."
+            tools:text="Very safe during daytime. Lots of police presence and well-lit streets."
             android:textSize="14sp"
             android:textColor="#666666"
             android:layout_marginBottom="12dp"
@@ -82,7 +80,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Anonymous User"
+                android:text="@string/tv_anonymous_user_text"
                 android:textSize="12sp"
                 android:textColor="#999999"/>
 
@@ -98,13 +96,13 @@
                     android:layout_height="32dp"
                     android:src="@android:drawable/arrow_up_float"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Upvote"/>
+                    android:contentDescription="@string/img_btn_upvote_description"/>
 
                 <TextView
                     android:id="@+id/tvVoteCount"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="0"
+                    tools:text="0"
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:layout_marginStart="4dp"
@@ -117,7 +115,7 @@
                     android:layout_height="32dp"
                     android:src="@android:drawable/arrow_down_float"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Downvote"/>
+                    android:contentDescription="@string/img_dmg_downvote_text"/>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

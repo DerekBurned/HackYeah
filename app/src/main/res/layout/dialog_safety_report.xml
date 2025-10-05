@@ -10,7 +10,7 @@
         android:id="@+id/tvLocationName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Loading location..."
+        android:text="@string/tv_loading_location_text"
         android:textSize="14sp"
         android:textColor="#666666"
         android:layout_marginBottom="8dp"
@@ -20,7 +20,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="How safe is this area?"
+        android:text="@string/tv_how_safe_is_this_area_text"
         android:textSize="16sp"
         android:textStyle="bold"
         android:layout_marginBottom="16dp"/>
@@ -38,7 +38,7 @@
             android:layout_height="80dp"
             android:layout_columnWeight="1"
             android:layout_margin="4dp"
-            android:text="✓ Safe"
+            android:text="@string/btn_safe_text"
             android:textSize="16sp"
             android:textStyle="bold"
             app:backgroundTint="#4CAF50"
@@ -52,7 +52,7 @@
             android:layout_height="80dp"
             android:layout_columnWeight="1"
             android:layout_margin="4dp"
-            android:text="⚠ Be Cautious"
+            android:text="@string/btn_be_cautious_text"
             android:textSize="16sp"
             android:textStyle="bold"
             app:backgroundTint="#FFC107"
@@ -66,7 +66,7 @@
             android:layout_height="80dp"
             android:layout_columnWeight="1"
             android:layout_margin="4dp"
-            android:text="⚡ Unsafe"
+            android:text="@string/btn_unsafe_text"
             android:textSize="16sp"
             android:textStyle="bold"
             app:backgroundTint="#FF9800"
@@ -80,7 +80,7 @@
             android:layout_height="80dp"
             android:layout_columnWeight="1"
             android:layout_margin="4dp"
-            android:text="✕ Dangerous"
+            android:text="@string/btn_dangerous_text"
             android:textSize="16sp"
             android:textStyle="bold"
             app:backgroundTint="#F44336"
@@ -93,7 +93,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Area Coverage Radius"
+        android:text="@string/tv_area_coverage_radius_text"
         android:textSize="14sp"
         android:textStyle="bold"
         android:layout_marginBottom="8dp"/>
@@ -128,7 +128,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="💡 Adjust the slider to set how large an area this report covers"
+        android:text="@string/tv_slidebar_instruction_text"
         android:textSize="12sp"
         android:textColor="#666666"
         android:layout_marginBottom="16dp"/>
@@ -136,7 +136,7 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Tell others why (required)"
+        android:hint="@string/tv_comment_hint"
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
         android:layout_marginBottom="16dp">
 
@@ -154,7 +154,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="💡 Be specific: mention time of day, what you saw, etc."
+        android:text="@string/tv_be_specific_mention_time_of_day_what_you_saw_etc_text"
         android:textSize="12sp"
         android:textColor="#666666"
         android:layout_marginBottom="16dp"/>
@@ -163,7 +163,7 @@
         android:id="@+id/btnCancel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Cancel"
+        android:text="@string/btn_cancel_text"
         style="@style/Widget.Material3.Button.OutlinedButton"/>
 
 </LinearLayout>

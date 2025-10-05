@@ -3,7 +3,6 @@ package Activities
 import android.Manifest
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.os.Handler
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
@@ -143,6 +142,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         )
 
         with(binding.autoCompleteSearch) {
+
             setAdapter(adapter)
             threshold = 1
 
@@ -173,6 +173,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
         binding.clearSearch.setOnClickListener {
             binding.autoCompleteSearch.text.clear()
+            mapHelper?.removeTemporaryMarker()
+            mapHelper?.zoomOut()
             binding.clearSearch.visibility = View.GONE
         }
     }
@@ -274,7 +276,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
         applyPendingData()
 
-        // Handle pending city search or fallback to current location
         val cityToSearch = pendingCitySearch
         if (!cityToSearch.isNullOrEmpty()) {
             Log.d(TAG, "✓ Processing pending city search: '$cityToSearch'")
@@ -294,30 +295,23 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         locationHelper.getLatLngFromLocationName(
             cityName,
             onSuccess = { latLng, address ->
-                // CRITICAL: Ensure we're on the main thread for UI updates
                 runOnUiThread {
                     Log.d(TAG, "✓✓✓ City FOUND: '$address' at $latLng")
                     Log.d(TAG, "Thread: ${Thread.currentThread().name}")
                     showLoading(false)
 
-                    // Update the search bar to show the full address
                     binding.autoCompleteSearch.setText(address)
 
-                    // Update center location FIRST
                     centerLocation = latLng
                     viewModel.setCenterLocation(latLng)
 
-                    // Ensure mapHelper exists and animate
                     mapHelper?.let { helper ->
                         Log.d(TAG, "MapHelper exists, animating camera to position: $latLng")
 
-                        // Add a temporary marker
                         helper.addTemporaryMarker(latLng, address, "Long press to report safety")
 
-                        // Animate to the location with zoom level 12 (good for cities)
                         helper.animateToPosition(latLng, 12f)
 
-                        // Load nearby reports
                         viewModel.loadNearbyReports(latLng.latitude, latLng.longitude, 100.0)
 
                         showToast("Viewing $address")
@@ -334,7 +328,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     Log.e(TAG, "✗✗✗ City NOT FOUND: '$cityName'")
                     Log.e(TAG, "Error: ${exception.message}")
                     showToast("Could not find city: $cityName. Using your location instead.")
-                    // Fallback to current location
                     checkLocationPermission()
                 }
             }
