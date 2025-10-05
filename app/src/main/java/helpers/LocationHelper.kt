@@ -173,30 +173,56 @@ class LocationManagerHelper(
     }
 
     fun getAddressFromLocation(latLng: LatLng, callback: (String) -> Unit) {
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
         try {
             val geocoder = Geocoder(context, Locale.getDefault())
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // New API - callback is already on main thread
                 geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1) { addresses ->
-                    if (addresses.isNotEmpty()) {
-                        callback(addresses[0].getAddressLine(0) ?: "Unknown Location")
+                    val result = if (addresses.isNotEmpty()) {
+                        addresses[0].getAddressLine(0) ?: "Unknown Location"
                     } else {
-                        callback("Unknown Location")
+                        "Unknown Location"
+                    }
+                    // Double ensure we're on main thread
+                    mainHandler.post {
+                        callback(result)
                     }
                 }
             } else {
-                @Suppress("DEPRECATION")
-                val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-                if (addresses != null && addresses.isNotEmpty()) {
-                    callback(addresses[0].getAddressLine(0) ?: "Unknown Location")
-                } else {
-                    callback("Unknown Location")
-                }
+                // Old API - runs synchronously, need to handle thread carefully
+                Thread {
+                    try {
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+                        val result = if (addresses != null && addresses.isNotEmpty()) {
+                            addresses[0].getAddressLine(0) ?: "Unknown Location"
+                        } else {
+                            "Unknown Location"
+                        }
+
+                        // CRITICAL: Post callback to main thread
+                        mainHandler.post {
+                            callback(result)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("LocationHelper", "Error getting address: ${e.message}")
+                        mainHandler.post {
+                            callback("Unknown Location")
+                        }
+                    }
+                }.start()
             }
         } catch (e: Exception) {
-            callback("Unknown Location")
+            Log.e("LocationHelper", "Error creating geocoder: ${e.message}")
+            mainHandler.post {
+                callback("Unknown Location")
+            }
         }
     }
+
 
     fun cancelLocationRequest() {
         locationCancellationToken?.cancel()

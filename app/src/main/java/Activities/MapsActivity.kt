@@ -528,7 +528,10 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             if (!callbackExecuted) {
                 Log.w(TAG, "Geocoder timeout, using default location name")
                 callbackExecuted = true
-                showAddReportDialog(latLng, "Selected Location")
+                // Ensure we're on main thread
+                runOnUiThread {
+                    showAddReportDialog(latLng, "Selected Location")
+                }
             }
         }
 
@@ -539,7 +542,13 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 callbackExecuted = true
                 timeoutHandler.removeCallbacks(timeoutRunnable)
                 Log.d(TAG, "Address received: $areaName")
-                showAddReportDialog(latLng, areaName)
+                Log.d(TAG, "Callback thread: ${Thread.currentThread().name}")
+
+                // Extra safety: ensure we're on main thread
+                runOnUiThread {
+                    Log.d(TAG, "Showing dialog on thread: ${Thread.currentThread().name}")
+                    showAddReportDialog(latLng, areaName)
+                }
             }
         }
     }
