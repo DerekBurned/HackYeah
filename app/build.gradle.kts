@@ -54,6 +54,10 @@ dependencies {
     // Material Design
     implementation(libs.material)
     implementation(libs.androidx.coordinatorlayout)
+    implementation("com.google.maps.android:android-maps-utils:3.8.2")
+// Make sure you also have these (they should already be there)
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
 
     // AndroidX Core
     implementation(libs.androidx.core.ktx)

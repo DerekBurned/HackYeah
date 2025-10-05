@@ -56,10 +56,7 @@ class SafetyViewModel : ViewModel() {
                 lastLoc.latitude, lastLoc.longitude,
                 latitude, longitude
             )
-            if (distance < loadDistanceThreshold) {
-                Log.d(TAG, "Location too close to last load ($distance km), skipping")
-                return
-            }
+
         }
 
         viewModelScope.launch {
@@ -160,6 +157,7 @@ class SafetyViewModel : ViewModel() {
         viewModelScope.launch {
             repository.voteOnReport(reportId, isUpvote)
                 .onSuccess {
+                    // Update local state
                     val currentReports = _reports.value ?: return@onSuccess
                     val updatedReports = currentReports.map { report ->
                         if (report.id == reportId) {
@@ -174,12 +172,16 @@ class SafetyViewModel : ViewModel() {
                     }
                     _reports.value = updatedReports
 
+                    // Mark as voted
                     val currentVoted = _votedReports.value?.toMutableSet() ?: mutableSetOf()
                     currentVoted.add(reportId)
                     _votedReports.value = currentVoted
+
+                    Log.d(TAG, "Vote successful for report $reportId")
                 }
                 .onFailure { exception ->
                     _error.value = exception.message
+                    Log.e(TAG, "Vote failed: ${exception.message}")
                 }
         }
     }

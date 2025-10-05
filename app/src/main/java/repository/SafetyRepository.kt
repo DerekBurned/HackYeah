@@ -87,7 +87,7 @@ class SafetyRepository {
     suspend fun getNearbyReports(
         latitude: Double,
         longitude: Double,
-        radiusKm: Double = 50.0
+        radiusKm: Double = 500.0
     ): Result<List<SafetyReport>> {
         return try {
             Log.d("SafetyRepository", "Fetching nearby reports for lat=$latitude, lon=$longitude, radius=$radiusKm km")
@@ -161,6 +161,7 @@ class SafetyRepository {
             val voteId = "${userId}_${reportId}"
             val voteRef = votesCollection.document(voteId)
 
+            // Check if vote already exists
             val existingVote = voteRef.get().await()
             if (existingVote.exists()) {
                 Log.d("SafetyRepository", "User has already voted on this report")
@@ -170,14 +171,18 @@ class SafetyRepository {
             val reportRef = reportsCollection.document(reportId)
             val field = if (isUpvote) "upvotes" else "downvotes"
 
+            // Use transaction to ensure atomicity
             db.runTransaction { transaction ->
                 val snapshot = transaction.get(reportRef)
                 if (!snapshot.exists()) {
                     throw Exception("Report not found")
                 }
+
+                // Increment the vote count
                 val currentValue = snapshot.getLong(field) ?: 0
                 transaction.update(reportRef, field, currentValue + 1)
 
+                // Record the vote
                 transaction.set(voteRef, hashMapOf(
                     "userId" to userId,
                     "reportId" to reportId,

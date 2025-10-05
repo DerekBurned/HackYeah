@@ -1,19 +1,59 @@
 package com.example.travelnow.helpers
 
+import android.content.Context
 import android.util.Log
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.*
+import com.google.maps.android.clustering.ClusterManager
+import com.example.travelnow.models.SafetyReportClusterItem
+import helpers.SafetyReportClusterRenderer
 import models.SafetyLevel
 import models.SafetyReport
 
+class MapManagerHelper(
+    private val map: GoogleMap,
+    private val context: Context
+) {
 
-class MapManagerHelper(private val map: GoogleMap) {
-
-    private val reportMarkers = mutableMapOf<String, Marker>()
+    private val clusterManager: ClusterManager<SafetyReportClusterItem>
     private val reportCircles = mutableMapOf<String, Circle>()
+    private val reportItems = mutableMapOf<String, SafetyReportClusterItem>()
     private var currentMarker: Marker? = null
     private var focusedReportId: String? = null
+
+    var onReportClickListener: ((String) -> Unit)? = null
+
+    init {
+        clusterManager = ClusterManager(context, map)
+
+        val renderer = SafetyReportClusterRenderer(context, map, clusterManager)
+        clusterManager.renderer = renderer
+
+        // IMPORTANT: Don't set these listeners here, they're set in MapsActivity
+        // map.setOnCameraIdleListener(clusterManager)
+        // map.setOnMarkerClickListener(clusterManager)
+
+        clusterManager.setOnClusterItemClickListener { item ->
+            onReportClickListener?.invoke(item.report.id)
+            true
+        }
+
+        clusterManager.setOnClusterClickListener { cluster ->
+            val builder = LatLngBounds.builder()
+            cluster.items.forEach { item ->
+                builder.include(item.position)
+            }
+            val bounds = builder.build()
+
+            try {
+                map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error zooming to cluster: ${e.message}")
+            }
+            true
+        }
+    }
 
     fun addReportToMap(report: SafetyReport) {
         val latLng = LatLng(report.latitude, report.longitude)
@@ -33,65 +73,67 @@ class MapManagerHelper(private val map: GoogleMap) {
                 .strokeWidth(3f)
                 .strokeColor(safetyLevel.color)
                 .fillColor(safetyLevel.colorWithAlpha)
-                .clickable(true)
+                .clickable(false)
                 .visible(true)
-                .zIndex(1f)
+                .zIndex(0.5f)
         )
 
-        val marker = map.addMarker(
-            MarkerOptions()
-                .position(latLng)
-                .title(safetyLevel.displayName)
-                .snippet(report.comment)
-                .icon(BitmapDescriptorFactory.defaultMarker(getMarkerHue(safetyLevel)))
-                .visible(true)
-                .zIndex(2f)
-        )
+        val clusterItem = SafetyReportClusterItem(report)
+        clusterManager.addItem(clusterItem)
 
-        marker?.tag = report.id
-        if (marker != null) {
-            reportMarkers[report.id] = marker
-            reportCircles[report.id] = circle
-            Log.d(TAG, "Successfully added marker and circle for report ${report.id}")
-        } else {
-            Log.e(TAG, "Failed to create marker for report ${report.id}")
-        }
+        reportCircles[report.id] = circle
+        reportItems[report.id] = clusterItem
+
+        Log.d(TAG, "Successfully added report ${report.id} to cluster manager")
     }
 
     fun updateReports(reports: List<SafetyReport>) {
         Log.d(TAG, "Updating reports on map. Received ${reports.size} reports")
+
+        // Don't clear everything if reports are similar
         val newReportIds = reports.map { it.id }.toSet()
-        val currentReportIds = reportMarkers.keys.toSet()
+        val currentReportIds = reportItems.keys.toSet()
 
         val toRemove = currentReportIds - newReportIds
-        Log.d(TAG, "Removing ${toRemove.size} old reports")
+        val toAdd = reports.filter { it.id !in currentReportIds }
+
+        // Only update if there are actual changes
+        if (toRemove.isEmpty() && toAdd.isEmpty()) {
+            Log.d(TAG, "No changes detected, skipping update")
+            return
+        }
+
+        Log.d(TAG, "Removing ${toRemove.size} old reports, adding ${toAdd.size} new reports")
+
         toRemove.forEach { reportId ->
             removeReport(reportId)
         }
 
-        val toAdd = reports.filter { it.id !in currentReportIds }
-        Log.d(TAG, "Adding ${toAdd.size} new reports")
         toAdd.forEach { report ->
             addReportToMap(report)
         }
 
-        Log.d(TAG, "Map now has ${reportMarkers.size} markers and ${reportCircles.size} circles")
+        // Only trigger cluster recalculation if something changed
+        clusterManager.cluster()
     }
 
     fun removeReport(reportId: String) {
-        reportMarkers[reportId]?.remove()
+        reportItems[reportId]?.let { item ->
+            clusterManager.removeItem(item)
+        }
         reportCircles[reportId]?.remove()
-        reportMarkers.remove(reportId)
+        reportItems.remove(reportId)
         reportCircles.remove(reportId)
         Log.d(TAG, "Removed report: $reportId")
     }
 
     fun clearAllReports() {
-        reportMarkers.values.forEach { it.remove() }
+        clusterManager.clearItems()
         reportCircles.values.forEach { it.remove() }
-        reportMarkers.clear()
+        reportItems.clear()
         reportCircles.clear()
         focusedReportId = null
+        clusterManager.cluster()
         Log.d(TAG, "Cleared all reports from map")
     }
 
@@ -99,8 +141,8 @@ class MapManagerHelper(private val map: GoogleMap) {
         focusedReportId = if (focusedReportId == reportId) null else reportId
 
         reportId?.let {
-            reportMarkers[it]?.let { marker ->
-                animateToPosition(marker.position, 15f)
+            reportItems[it]?.let { item ->
+                animateToPosition(item.position, 15f)
             }
         }
     }
@@ -108,7 +150,7 @@ class MapManagerHelper(private val map: GoogleMap) {
     fun getFocusedReportId(): String? = focusedReportId
 
     fun getMarkerPosition(reportId: String): LatLng? {
-        return reportMarkers[reportId]?.position
+        return reportItems[reportId]?.position
     }
 
     fun addTemporaryMarker(latLng: LatLng, title: String, snippet: String): Marker? {
@@ -119,6 +161,7 @@ class MapManagerHelper(private val map: GoogleMap) {
                 .title(title)
                 .snippet(snippet)
                 .draggable(true)
+                .zIndex(10f)
         )
         return currentMarker
     }
@@ -153,18 +196,15 @@ class MapManagerHelper(private val map: GoogleMap) {
         return map.cameraPosition.zoom
     }
 
-    private fun getMarkerHue(safetyLevel: SafetyLevel): Float {
-        return when (safetyLevel) {
-            SafetyLevel.SAFE -> BitmapDescriptorFactory.HUE_GREEN
-            SafetyLevel.BE_CAUTIOUS -> BitmapDescriptorFactory.HUE_YELLOW
-            SafetyLevel.UNSAFE -> BitmapDescriptorFactory.HUE_ORANGE
-            SafetyLevel.DANGEROUS -> BitmapDescriptorFactory.HUE_RED
-            else -> BitmapDescriptorFactory.HUE_VIOLET
-        }
+    fun onCameraIdle() {
+        clusterManager.onCameraIdle()
+    }
+
+    fun getClusterManager(): ClusterManager<SafetyReportClusterItem> {
+        return clusterManager
     }
 
     companion object {
         private const val TAG = "MapManagerHelper"
     }
 }
-

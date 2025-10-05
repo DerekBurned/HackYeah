@@ -27,4 +27,3 @@ class MyApplication : Application() {
         viewModelStore.clear()
     }
 }
-

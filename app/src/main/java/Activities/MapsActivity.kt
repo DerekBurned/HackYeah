@@ -1,4 +1,4 @@
-package com.example.travelnow
+package Activities
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -11,11 +11,12 @@ import android.view.inputmethod.EditorInfo
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresPermission
+import com.example.travelnow.MyApplication
 import androidx.appcompat.app.AppCompatActivity
 import com.example.travelnow.databinding.ActivityMapsBinding
 import com.example.travelnow.helpers.*
 import com.example.travelnow.models.SortOptions
+import com.example.travelnow.R
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
@@ -56,9 +57,24 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Log.d(TAG, "========== MapsActivity onCreate START ==========")
         super.onCreate(savedInstanceState)
-        binding = ActivityMapsBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        Log.d(TAG, "After super.onCreate")
+
+        try {
+            binding = ActivityMapsBinding.inflate(layoutInflater)
+            Log.d(TAG, "Binding inflated successfully")
+            setContentView(binding.root)
+            Log.d(TAG, "Content view set successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onCreate: ${e.message}", e)
+            throw e
+        }
+
+        // rest of your code...
+
+
+
 
         initializeComponents()
         authenticateUser()
@@ -212,54 +228,31 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             Log.d(TAG, "Voted reports updated: ${votedIds.size} reports")
         }
     }
-
+    private fun handleReportsUpdate(reports: List<SafetyReport>) {
+        Log.d(TAG, "Handling ${reports.size} reports update")
+        if (mapHelper != null) {
+            Log.d(TAG, "MapHelper is ready, updating reports")
+            mapHelper?.updateReports(reports)
+            pendingReports = null
+        } else {
+            Log.d(TAG, "MapHelper not ready, storing pending reports")
+            pendingReports = reports
+        }
+    }
     override fun onMapReady(googleMap: GoogleMap) {
         Log.d(TAG, "Map is ready")
-        mapHelper = MapManagerHelper(googleMap)
+        mapHelper = MapManagerHelper(googleMap, this)  // Pass 'this' as context
 
         configureMap(googleMap)
         setupMapListeners(googleMap)
         checkLocationPermission()
         applyPendingData()
-    }
 
-    private fun configureMap(map: GoogleMap) {
-        map.mapType = GoogleMap.MAP_TYPE_NORMAL
-        map.uiSettings.apply {
-            isZoomControlsEnabled = false
-            isCompassEnabled = true
-            isMyLocationButtonEnabled = false
-            isMapToolbarEnabled = true
-            isZoomGesturesEnabled = true
-            isScrollGesturesEnabled = true
-            isTiltGesturesEnabled = true
-            isRotateGesturesEnabled = true
-        }
-
-        if (locationHelper.hasLocationPermission()) {
-            map.isMyLocationEnabled = true
+        // Set up report click listener
+        mapHelper?.onReportClickListener = { reportId ->
+            showViewReportDialog(reportId)
         }
     }
-
-    private fun setupMapListeners(map: GoogleMap) {
-        map.setOnMapLongClickListener { latLng ->
-            Log.d(TAG, "Map long clicked at: $latLng")
-            handleMapLongClick(latLng)
-        }
-
-        map.setOnMapClickListener { latLng ->
-            handleMapClick(latLng)
-        }
-
-        map.setOnMarkerClickListener { marker ->
-            handleMarkerClick(marker.tag as? String)
-        }
-
-        map.setOnCameraIdleListener {
-            handleCameraIdle()
-        }
-    }
-
     private fun applyPendingData() {
         pendingReports?.let { reports ->
             Log.d(TAG, "Applying ${reports.size} pending reports")
@@ -282,6 +275,48 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             mapHelper?.animateToPosition(location, 14f)
         }
     }
+    private fun configureMap(map: GoogleMap) {
+        map.mapType = GoogleMap.MAP_TYPE_NORMAL
+        map.uiSettings.apply {
+            isZoomControlsEnabled = false
+            isCompassEnabled = true
+            isMyLocationButtonEnabled = false
+            isMapToolbarEnabled = true
+            isZoomGesturesEnabled = true
+            isScrollGesturesEnabled = true
+            isTiltGesturesEnabled = true
+            isRotateGesturesEnabled = true
+        }
+
+        if (locationHelper.hasLocationPermission()) {
+            map.isMyLocationEnabled = true
+        }
+    }
+
+    @SuppressLint("PotentialBehaviorOverride")
+    private fun setupMapListeners(map: GoogleMap) {
+        map.setOnMapLongClickListener { latLng ->
+            Log.d(TAG, "Map long clicked at: $latLng")
+            handleMapLongClick(latLng)
+        }
+
+        // Set cluster manager as the marker click listener
+        map.setOnMarkerClickListener { marker ->
+            // Check if it's the temporary marker first
+            if (marker.zIndex == 10f) {
+                false // Let the default behavior handle it
+            } else {
+                // Let cluster manager handle it
+                mapHelper?.getClusterManager()?.onMarkerClick(marker) ?: false
+            }
+        }
+
+        map.setOnCameraIdleListener {
+            handleCameraIdle()
+        }
+    }
+
+
 
     private fun handleSearchTextChanged(text: CharSequence?, adapter: ArrayAdapter<String>) {
         if (!text.isNullOrEmpty()) {
@@ -353,6 +388,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun getCurrentLocation() {
         if (!locationHelper.hasLocationPermission()) return
 
+        if (!locationHelper.isGpsEnabled()) {
+            dialogManager.showGpsSettingsDialog()
+            return
+        }
+
         showLoading(true)
         locationHelper.getCurrentLocation(
             onSuccess = { location ->
@@ -366,13 +406,42 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             },
             onFailure = { exception ->
                 showLoading(false)
-                showToast("Failed to get location: ${exception.message}")
+                if (exception.message?.contains("GPS is disabled") == true) {
+                    dialogManager.showGpsSettingsDialog()
+                } else {
+                    showToast("Failed to get location: ${exception.message}")
+                }
             }
         )
     }
 
     private fun handleMapLongClick(latLng: LatLng) {
         Log.d(TAG, "Map long clicked at: $latLng")
+
+        if (!locationHelper.isGpsEnabled()) {
+            dialogManager.showGpsSettingsDialog()
+            return
+        }
+
+        val currentLoc = centerLocation
+        if (currentLoc == null) {
+            showToast("Getting your location... Please wait and try again.")
+            getCurrentLocation()
+            return
+        }
+
+        val distance = locationHelper.calculateDistance(
+            currentLoc.latitude,
+            currentLoc.longitude,
+            latLng.latitude,
+            latLng.longitude
+        )
+
+        if (distance > 100.0) {
+            dialogManager.showDistanceTooFarDialog(distance)
+            return
+        }
+
         Log.d(TAG, "Getting address for long click")
 
         var callbackExecuted = false
@@ -407,35 +476,26 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    private fun handleMarkerClick(reportId: String?): Boolean {
-        return if (reportId != null) {
-            showViewReportDialog(reportId)
-            true
-        } else {
-            false
-        }
-    }
+    private var lastReportLoadTime = 0L
+    private val REPORT_LOAD_DELAY = 1000L // 1 second
 
     private fun handleCameraIdle() {
+        // Always update clustering
+        mapHelper?.onCameraIdle()
+
         val center = mapHelper?.getCurrentCameraPosition() ?: return
         val zoom = mapHelper?.getCurrentZoom() ?: return
 
+        // Only reload reports if enough time has passed and zoom is appropriate
         if (zoom >= 10f) {
-            viewModel.loadNearbyReports(center.latitude, center.longitude, 100.0)
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastReportLoadTime > REPORT_LOAD_DELAY) {
+                lastReportLoadTime = currentTime
+                viewModel.loadNearbyReports(center.latitude, center.longitude, 100.0)
+            }
         }
     }
 
-    private fun handleReportsUpdate(reports: List<SafetyReport>) {
-        Log.d(TAG, "Handling ${reports.size} reports update")
-        if (mapHelper != null) {
-            Log.d(TAG, "MapHelper is ready, updating reports")
-            mapHelper?.updateReports(reports)
-            pendingReports = null
-        } else {
-            Log.d(TAG, "MapHelper not ready, storing pending reports")
-            pendingReports = reports
-        }
-    }
 
     private fun showAddReportDialog(latLng: LatLng, areaName: String) {
         Log.d(TAG, "Showing add report dialog for: $areaName")
@@ -476,6 +536,21 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             return
         }
 
+        val currentLoc = centerLocation
+        if (currentLoc != null) {
+            val distance = locationHelper.calculateDistance(
+                currentLoc.latitude,
+                currentLoc.longitude,
+                latLng.latitude,
+                latLng.longitude
+            )
+
+            if (distance > 100.0) {
+                showToast("Location is too far from your current position")
+                return
+            }
+        }
+
         viewModel.submitReport(
             latLng.latitude,
             latLng.longitude,
@@ -486,6 +561,14 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         )
     }
 
+    // Add this override method to your MapsActivity class:
+    override fun onResume() {
+        super.onResume()
+
+        if (locationHelper.isGpsEnabled() && centerLocation == null) {
+            checkLocationPermission()
+        }
+    }
     private fun showReportsBottomSheet() {
         val allReports = viewModel.reports.value ?: emptyList()
         val votedReportIds = viewModel.votedReports.value ?: emptySet()
@@ -554,4 +637,5 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     companion object {
         private const val TAG = "MapsActivity"
     }
+
 }

@@ -1,21 +1,17 @@
-package com.example.travelnow
+package com.example.travelnow.adapters
 
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.example.travelnow.databinding.ItemSafetyReportBinding
 import models.SafetyReport
 
-
-
-
 class SafetyReportAdapter(
     private val onUpvoteClick: (SafetyReport) -> Unit,
     private val onDownvoteClick: (SafetyReport) -> Unit,
-    private val onItemClick: (SafetyReport) -> Unit
+    private val onItemClick: (SafetyReport) -> Unit,
+    votedReportIds: Set<String>
 ) : RecyclerView.Adapter<SafetyReportAdapter.ReportViewHolder>() {
 
     private var reports = listOf<SafetyReport>()

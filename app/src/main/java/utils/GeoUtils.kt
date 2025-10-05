@@ -1,5 +1,7 @@
 package utils
 
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.SphericalUtil
 import kotlin.math.*
 
 object GeoUtils {
@@ -7,16 +9,18 @@ object GeoUtils {
     private const val BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 
 
+    /**
+     * Calculates the great-circle distance between two points on Earth using the Haversine formula
+     * @param lat1 Latitude of first point in degrees
+     * @param lon1 Longitude of first point in degrees
+     * @param lat2 Latitude of second point in degrees
+     * @param lon2 Longitude of second point in degrees
+     * @return Distance in kilometers
+     */
     fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-                sin(dLon / 2) * sin(dLon / 2)
-
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return EARTH_RADIUS_KM * c
+        val from = LatLng(lat1, lon1)
+        val to = LatLng(lat2, lon2)
+        return SphericalUtil.computeDistanceBetween(from, to) / 1000.0
     }
 
 
