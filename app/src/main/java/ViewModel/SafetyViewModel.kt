@@ -1,21 +1,21 @@
 package ViewModel
 
+import android.app.Application
 import android.util.Log
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.LatLng
 import models.SafetyReport
 import kotlinx.coroutines.launch
 import repository.SafetyRepository
 
+class SafetyViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = SafetyRepository(application)
 
-class SafetyViewModel : ViewModel() {
-    private val repository = SafetyRepository()
-
-    private val _reports = MutableLiveData<List<SafetyReport>>()
-    val reports: LiveData<List<SafetyReport>> = _reports
+    val reports: LiveData<List<SafetyReport>> = repository.getReportsFlow().asLiveData()
 
     private val _loading = MutableLiveData<Boolean>()
     val loading: LiveData<Boolean> = _loading
@@ -38,78 +38,140 @@ class SafetyViewModel : ViewModel() {
     private val _votedReports = MutableLiveData<Set<String>>()
     val votedReports: LiveData<Set<String>> = _votedReports
 
-    private var currentReportIds = emptySet<String>()
-    private var isLoadingData = false
     private var lastLoadLocation: LatLng? = null
-    private val loadDistanceThreshold = 5.0
+    private val loadDistanceThreshold = 5.0 // km
+    private var lastLoadTime = 0L
+    private val loadTimeThreshold = 30000L // 30 seconds
 
-    fun loadNearbyReports(latitude: Double, longitude: Double, radiusKm: Double = 50.0) {
+    init {
+        syncUnsyncedReports()
+        cleanOldReports()
+    }
+
+    /**
+     * Load nearby reports - checks distance/time threshold before fetching
+     */
+    fun loadNearbyReports(latitude: Double, longitude: Double, radiusKm: Double = 100.0) {
         val currentLocation = LatLng(latitude, longitude)
+        val currentTime = System.currentTimeMillis()
 
-        if (isLoadingData) {
-            Log.d(TAG, "Already loading data, skipping")
-            return
-        }
+        var shouldRefresh = false
 
         lastLoadLocation?.let { lastLoc ->
             val distance = calculateDistance(
                 lastLoc.latitude, lastLoc.longitude,
                 latitude, longitude
             )
-
+            if (distance > loadDistanceThreshold) {
+                shouldRefresh = true
+                Log.d(TAG, "Position changed by ${String.format("%.2f", distance)} km, refreshing")
+            }
+        } ?: run {
+            shouldRefresh = true
+            Log.d(TAG, "First load, fetching reports")
         }
 
+        if (currentTime - lastLoadTime > loadTimeThreshold) {
+            shouldRefresh = true
+            Log.d(TAG, "Time threshold exceeded, refreshing")
+        }
+
+        if (shouldRefresh) {
+            viewModelScope.launch {
+                _loading.value = true
+                _error.value = null
+
+                Log.d(TAG, "Loading nearby reports for lat=$latitude, lon=$longitude, radius=$radiusKm")
+
+                repository.getNearbyReports(latitude, longitude, radiusKm, forceRefresh = true)
+                    .onSuccess { newReports ->
+                        Log.d(TAG, "Successfully loaded ${newReports.size} reports from Firebase")
+                        lastLoadLocation = currentLocation
+                        lastLoadTime = currentTime
+
+                        loadUserVotes(newReports.map { it.id })
+
+                        _loading.value = false
+                    }
+                    .onFailure { exception ->
+                        Log.e(TAG, "Failed to load reports from Firebase: ${exception.message}")
+                        Log.d(TAG, "Using cached data")
+                        _error.value = "Using cached data"
+                        _loading.value = false
+                    }
+            }
+        } else {
+            Log.d(TAG, "Using cached reports, position change too small")
+        }
+    }
+
+    /**
+     * Force refresh - always fetches from Firebase
+     */
+    fun forceRefresh(latitude: Double, longitude: Double, radiusKm: Double = 100.0) {
         viewModelScope.launch {
-            isLoadingData = true
             _loading.value = true
             _error.value = null
 
-            Log.d(TAG, "Loading nearby reports for lat=$latitude, lon=$longitude, radius=$radiusKm")
+            Log.d(TAG, "Force refreshing reports")
 
-            repository.getNearbyReports(latitude, longitude, radiusKm)
+            repository.getNearbyReports(latitude, longitude, radiusKm, forceRefresh = true)
                 .onSuccess { newReports ->
-                    Log.d(TAG, "Successfully loaded ${newReports.size} reports")
-                    _reports.value = newReports
-                    currentReportIds = newReports.map { it.id }.toSet()
-                    lastLoadLocation = currentLocation
+                    Log.d(TAG, "Successfully force loaded ${newReports.size} reports")
+                    lastLoadLocation = LatLng(latitude, longitude)
+                    lastLoadTime = System.currentTimeMillis()
 
                     loadUserVotes(newReports.map { it.id })
-
                     _loading.value = false
-                    isLoadingData = false
                 }
                 .onFailure { exception ->
-                    Log.e(TAG, "Failed to load reports: ${exception.message}")
+                    Log.e(TAG, "Force refresh failed: ${exception.message}")
                     _error.value = exception.message
                     _loading.value = false
-                    isLoadingData = false
                 }
         }
     }
 
-    fun loadRecentReports() {
-        if (isLoadingData) return
+    /**
+     * Reset load thresholds - forces next loadNearbyReports to refresh
+     */
+    fun resetLoadThresholds() {
+        lastLoadLocation = null
+        lastLoadTime = 0L
+        Log.d(TAG, "Load thresholds reset - next load will force refresh")
+    }
 
+    /**
+     * Clear all cached reports and force refresh from Firebase
+     */
+    fun clearCacheAndRefresh(latitude: Double, longitude: Double, radiusKm: Double = 100.0) {
         viewModelScope.launch {
-            isLoadingData = true
             _loading.value = true
             _error.value = null
 
-            repository.getRecentReports()
-                .onSuccess { reports ->
-                    _reports.value = reports
-                    currentReportIds = reports.map { it.id }.toSet()
+            try {
+                Log.d(TAG, "Clearing local cache...")
+                repository.clearAllReports()
+                Log.d(TAG, "Forcing refresh from Firebase...")
+                repository.getNearbyReports(latitude, longitude, radiusKm, forceRefresh = true)
+                    .onSuccess { newReports ->
+                        Log.d(TAG, "Successfully refreshed ${newReports.size} reports")
+                        lastLoadLocation = LatLng(latitude, longitude)
+                        lastLoadTime = System.currentTimeMillis()
 
-                    loadUserVotes(reports.map { it.id })
-
-                    _loading.value = false
-                    isLoadingData = false
-                }
-                .onFailure { exception ->
-                    _error.value = exception.message
-                    _loading.value = false
-                    isLoadingData = false
-                }
+                        loadUserVotes(newReports.map { it.id })
+                        _loading.value = false
+                    }
+                    .onFailure { exception ->
+                        Log.e(TAG, "Failed to refresh: ${exception.message}")
+                        _error.value = exception.message
+                        _loading.value = false
+                    }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing cache: ${e.message}")
+                _error.value = e.message
+                _loading.value = false
+            }
         }
     }
 
@@ -142,7 +204,6 @@ class SafetyViewModel : ViewModel() {
                     Log.d(TAG, "Report submitted successfully")
                     _submitSuccess.value = true
                     _loading.value = false
-                    forceRefresh(latitude, longitude)
                 }
                 .onFailure { exception ->
                     Log.e(TAG, "Failed to submit report: ${exception.message}")
@@ -157,22 +218,6 @@ class SafetyViewModel : ViewModel() {
         viewModelScope.launch {
             repository.voteOnReport(reportId, isUpvote)
                 .onSuccess {
-                    // Update local state
-                    val currentReports = _reports.value ?: return@onSuccess
-                    val updatedReports = currentReports.map { report ->
-                        if (report.id == reportId) {
-                            if (isUpvote) {
-                                report.copy(upvotes = report.upvotes + 1)
-                            } else {
-                                report.copy(downvotes = report.downvotes + 1)
-                            }
-                        } else {
-                            report
-                        }
-                    }
-                    _reports.value = updatedReports
-
-                    // Mark as voted
                     val currentVoted = _votedReports.value?.toMutableSet() ?: mutableSetOf()
                     currentVoted.add(reportId)
                     _votedReports.value = currentVoted
@@ -194,8 +239,10 @@ class SafetyViewModel : ViewModel() {
         viewModelScope.launch {
             repository.deleteReport(reportId)
                 .onSuccess {
-                    _reports.value = _reports.value?.filter { it.id != reportId }
-                    currentReportIds = _reports.value?.map { it.id }?.toSet() ?: emptySet()
+                    Log.d(TAG, "Report deleted successfully")
+                }
+                .onFailure { exception ->
+                    _error.value = exception.message
                 }
         }
     }
@@ -220,11 +267,35 @@ class SafetyViewModel : ViewModel() {
         _submitSuccess.value = false
     }
 
-    fun forceRefresh(latitude: Double, longitude: Double, radiusKm: Double = 50.0) {
-        currentReportIds = emptySet()
-        isLoadingData = false
-        lastLoadLocation = null
-        loadNearbyReports(latitude, longitude, radiusKm)
+    /**
+     * Sync any unsynced reports with Firebase
+     */
+    fun syncUnsyncedReports() {
+        viewModelScope.launch {
+            try {
+                repository.syncUnsyncedReports()
+                    .onSuccess { count ->
+                        if (count > 0) {
+                            Log.d(TAG, "Synced $count reports with Firebase")
+                        }
+                    }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync unsynced reports: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Clean old cached reports
+     */
+    private fun cleanOldReports() {
+        viewModelScope.launch {
+            try {
+                repository.cleanOldReports()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clean old reports: ${e.message}")
+            }
+        }
     }
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

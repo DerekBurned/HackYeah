@@ -11,10 +11,8 @@ class MyApplication : Application() {
     private val viewModelStore = ViewModelStore()
 
     val safetyViewModel: SafetyViewModel by lazy {
-        ViewModelProvider(
-            viewModelStore,
-            ViewModelProvider.NewInstanceFactory()
-        )[SafetyViewModel::class.java]
+        ViewModelProvider.AndroidViewModelFactory.getInstance(this)
+            .create(SafetyViewModel::class.java)
     }
 
     override fun onCreate() {

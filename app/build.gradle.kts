@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.google.android.libraries.mapsplatform.secrets.gradle.plugin)
+    alias(libs.plugins.ksp)
     id("com.google.gms.google-services")
 }
 
@@ -40,23 +41,29 @@ android {
     }
 }
 
+// Add this configuration block to force the newer version
+configurations.all {
+    resolutionStrategy {
+        force("org.jetbrains:annotations:23.0.0")
+    }
+}
+
 dependencies {
-    // Google Play Services (use latest versions only)
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
 
     // Google Places API
     implementation(libs.places)
 
+    implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
-    implementation(platform(libs.firebase.bom))
+
     // Material Design
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.material)
     implementation(libs.androidx.coordinatorlayout)
     implementation("com.google.maps.android:android-maps-utils:3.8.2")
-// Make sure you also have these (they should already be there)
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.0.1")
 
@@ -66,15 +73,21 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
 
-    implementation(platform(libs.firebase.bom))
-
     // Firebase dependencies
-    implementation(libs.firebase.auth)
-    implementation(libs.firebase.firestore)
     implementation(libs.play.services.auth)
 
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // Optional
+    implementation(libs.androidx.room.paging)
+    testImplementation(libs.androidx.room.testing)
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.2")
 }
