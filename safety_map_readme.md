@@ -325,7 +325,7 @@ We welcome contributions from the community! Here's how you can help:
 
 ## 👥 Authors
 
-- **Danylo Lukianiuk** - *Student* - [YourGitHub](https://github.com/yourusername)
+- **Danylo Lukianiuk** - *Student* - [DerekBurned](https://github.com/DerekBurned)
 
 ---
 
