@@ -1,4 +1,4 @@
-# Know Before You Go 🌍🛡️
+# Know Before You Go 
 
 A community-powered Android travel safety app that lets users report and discover safety conditions in cities around the world. Built with Google Maps, Firebase, and Room for offline-first functionality.
 
